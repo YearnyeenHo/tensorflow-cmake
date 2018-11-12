@@ -5,6 +5,8 @@
 #include "tensorflow/cc/ops/image_ops.h"
 #include <iostream>
 #include <string>
+#include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
 
 typedef std::vector<std::pair<std::string, tensorflow::Tensor>> tensor_dict;
 
@@ -69,7 +71,7 @@ tensorflow::Status LoadModel(tensorflow::Session *sess, std::string graph_fn,
 }
 
 int main(int argc, char const *argv[]) {
-  const std::string graph_fn = "./graph_opt.pb";
+  const std::string graph_fn = "./expert-graph.pb";
   //const std::string checkpoint_fn = "./exported/my_model";
 
   // prepare session
@@ -105,39 +107,36 @@ int main(int argc, char const *argv[]) {
   // copy data from OpenCv to TensorFlow Tensor
   std::copy_n((char*) image_float_data, image_shape.num_elements() * sizeof(float),
                   const_cast<char*>(image_tensor.tensor_data().data()));
+  /*
+    upsample_size = [int(self.target_size[1] / 8 * upsample_size), int(self.target_size[0] / 8 * upsample_size)]
+    self.upsample_size = self.graph.get_tensor_by_name('output_tensors/upsample_size:0')
+    self.tensor_heatMat_up = self.graph.get_tensor_by_name('output_tensors/upsample_heatmat:0')
+    self.tensor_pafMat_up = self.graph.get_tensor_by_name('output_tensors/upsample_pafmat:0')
+    self.tensor_peaks = self.graph.get_tensor_by_name('output_tensors/tensor_peaks:0')
+  */
+  tensorflow::TensorShape shape({2});
+  tensorflow::Tensor upsample_tensor(tensorflow::DT_FLOAT, shape);
+  // same as in python file
+  auto data_ = upsample_tensor.flat<float>().data();
+  for (int i = 0; i < 2; ++i) data_[i] = int(224/8.0*4);
   tensor_dict feed_dict = {
-      {"image", image_tensor},
+      {"image:0", image_tensor}, 
+      {"output_tensors/upsample_size:0",upsample_tensor},
   };
   std::vector<tensorflow::Tensor> outputs;
-  TF_CHECK_OK(sess->Run(feed_dict, {"Openpose/concat_stage7"},
+  TF_CHECK_OK(sess->Run(feed_dict, 
+                        {"output_tensors/upsample_heatmat:0", 
+                        "output_tensors/upsample_pafmat:0", 
+                        "output_tensors/tensor_peaks:0"},
                         {}, &outputs));
-  auto mat = outputs[0].tensor();//Eigen::tensor
-  Eigen::array<int, 4> offsets1 = {0, 0, 0, 0};
-  Eigen::array<int, 4> extents1 = {1, 28, 28,19};
-  Eigen::Tensor<int, 4> tensor_heatMat = mat.slice(offsets1, extents1);//output[:,:,:,:19]
-  Eigen::array<int, 4> offsets2 = {0, 0, 0, 19};
-  Eigen::array<int, 4> extents2 = {1, 28, 28,57};
-  Eigen::Tensor<int, 4> tensor_pafMat = mat.slice(offsets2, extents2);//output[:,:,:,:19]
+  auto upsample_heatmat = outputs[0].tensor();//Eigen::tensor
+  auto upsample_pafmat  = outputs[1].tensor();//Eigen::tensor
+  auto tensor_peaks     = outputs[2].tensor();//Eigen::tensor
 
   std::cout << "input                 " << image_tensor.DebugString() << std::endl;
-  std::cout << "Openpose/concat_stage7" << outputs[0].DebugString() << std::endl;
-  // create input tensor
-  tensorflow::Tensor image_tensor = tensorflow::Tensor(tensorflow::DT_FLOAT, image_shape);
-  tensorflow::Tensor image_tensor = tensorflow::Tensor(tensorflow::DT_FLOAT, image_shape);
-
-  // copy data from Eigen::Tensor to TensorFlow Tensor
-  tensorflow::TensorShape shape1({1, 28,28,19});
-  
-  std::copy_n((char*) tensor_pafMat, shape1.num_elements() * sizeof(float),
-                  const_cast<char*>(image_tensor.tensor_data().data()));
-  // copy data from Eigen::Tensor to TensorFlow Tensor
-  tensorflow::TensorShape shape2({1, 28,28,38});
-  std::copy_n((char*) tensor_pafMat, shape2.num_elements() * sizeof(float),
-                  const_cast<char*>(image_tensor.tensor_data().data()));
-   // create graph for resizing images
-  tensorflow::Scope root = tensorflow::Scope::NewRootScope();
-
-  auto resized = tensorflow::ops::ResizeArea(root, image_tensor, tensorflow::ops::Const(root.WithOpName("size"), {2 * image.rows, 2 * image.cols}));
-
+  std::cout << "upsample_heatmat" << outputs[0].DebugString() << std::endl;
+  std::cout << "upsample_pafmat" << outputs[1].DebugString() << std::endl;
+  std::cout << "tensor_peaks" << outputs[2].DebugString() << std::endl;
+ 
   return 0;
 }

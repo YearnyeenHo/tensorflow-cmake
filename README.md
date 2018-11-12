@@ -93,6 +93,8 @@ user@host $ mkdir ${TENSORFLOW_BUILD_DIR}
 user@host $ cp ${TENSORFLOW_SOURCE_DIR}/bazel-bin/tensorflow/*.so ${TENSORFLOW_BUILD_DIR}/
 user@host $ cp ${TENSORFLOW_SOURCE_DIR}/bazel-genfiles/tensorflow/cc/ops/*.h ${TENSORFLOW_BUILD_DIR}/includes/tensorflow/cc/ops/
 ```
+#### deleting the line build:opt --host_copt=-march=native from the .tf_configure.bazelrc file.
+#### bazel build -c opt  --copt=-msse4.2  //tensorflow:libtensorflow.so
 
 ### 1. Save Model
 
