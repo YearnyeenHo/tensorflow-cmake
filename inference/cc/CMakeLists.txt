@@ -21,9 +21,8 @@ TensorFlow_REQUIRE_SOURCE()
 include_directories(${OpenCV_INCLUDE_DIRS})
 include_directories($ENV{TENSORFLOW_BUILD_DIR}/includes/)
 
-add_executable (tensorflow_version tensorflow_version.cc)
-target_link_libraries(tensorflow_version PRIVATE TensorFlow_DEP)
 
-add_executable (opencv_version opencv_version.cc)
-target_link_libraries(opencv_version ${OpenCV_LIBS})
-target_link_libraries(opencv_version TensorFlow_DEP)
+add_executable (run_infer run_infer.cc)
+#target_include_directories(run_infer PRIVATE TensorFlow_DEP)
+target_link_libraries(run_infer ${OpenCV_LIBS})
+target_link_libraries(run_infer TensorFlow_DEP)

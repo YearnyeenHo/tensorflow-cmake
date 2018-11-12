@@ -123,7 +123,7 @@ else()
     # However, only TensorFlow versions 1.9, 1.10 support all header files
     # for custom ops.
     set(_TensorFlow_KNOWN_VERSIONS ${TensorFlow_ADDITIONAL_VERSIONS}
-        "1.9" "1.9.0" "1.10" "1.10.0" "1.11" "1.11.0")
+        "1.9" "1.9.0" "1.10" "1.10.0" "1.11" "1.11.0" "1.12" "1.12.0")
     set(_TensorFlow_TEST_VERSIONS)
 
     if(TF_FIND_VERSION)
@@ -168,7 +168,7 @@ else()
   endif(NOT TensorFlow_FOUND)
 
   # test 1.11 version
-  if("${TF_DETECTED_VERSION}" VERSION_EQUAL "1.11")
+  if("${TF_DETECTED_VERSION}" VERSION_EQUAL "1.12")
     set(TF_DISABLE_ASSERTS "TRUE")
   endif()
 
@@ -260,8 +260,10 @@ endmacro()
 add_library(TensorFlow_DEP INTERFACE)
 TARGET_INCLUDE_DIRECTORIES(TensorFlow_DEP SYSTEM INTERFACE ${TensorFlow_SOURCE_DIR})
 TARGET_INCLUDE_DIRECTORIES(TensorFlow_DEP SYSTEM INTERFACE ${TensorFlow_INCLUDE_DIR})
-TARGET_LINK_LIBRARIES(TensorFlow_DEP INTERFACE -Wl,--allow-multiple-definition -Wl,--whole-archive ${TensorFlow_C_LIBRARY} -Wl,--no-whole-archive)
-TARGET_LINK_LIBRARIES(TensorFlow_DEP INTERFACE -Wl,--allow-multiple-definition -Wl,--whole-archive ${TensorFlow_LIBRARY} -Wl,--no-whole-archive)
+#TARGET_LINK_LIBRARIES(TensorFlow_DEP INTERFACE -Wl,--allow-multiple-definition -Wl,--whole-archive ${TensorFlow_C_LIBRARY} -Wl,--no-whole-archive)
+#TARGET_LINK_LIBRARIES(TensorFlow_DEP INTERFACE -Wl,--allow-multiple-definition -Wl,--whole-archive ${TensorFlow_LIBRARY} -Wl,--no-whole-archive)
+TARGET_LINK_LIBRARIES(TensorFlow_DEP INTERFACE -Wl,  ${TensorFlow_C_LIBRARY} -Wl)
+TARGET_LINK_LIBRARIES(TensorFlow_DEP INTERFACE -Wl,  ${TensorFlow_LIBRARY} -Wl)
 
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(

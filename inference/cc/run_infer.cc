@@ -6,7 +6,8 @@
 #include <iostream>
 #include <string>
 #include <opencv2/core/core.hpp>
-#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/highgui.hpp>
 
 typedef std::vector<std::pair<std::string, tensorflow::Tensor>> tensor_dict;
 
@@ -97,8 +98,8 @@ int main(int argc, char const *argv[]) {
     return -1;
   }
   // Create a 4D blob from a frame.
-  Size inpSize(224, 224);
-  cv::resize(image, image, inpSize)
+  cv::Size inpSize(224, 224);
+  cv::resize(image, image, inpSize);
   // convert byte to float image
   cv::Mat image_float;
   image.convertTo(image_float, CV_32FC3);
@@ -129,9 +130,9 @@ int main(int argc, char const *argv[]) {
                         "output_tensors/upsample_pafmat:0", 
                         "output_tensors/tensor_peaks:0"},
                         {}, &outputs));
-  auto upsample_heatmat = outputs[0].tensor();//Eigen::tensor
-  auto upsample_pafmat  = outputs[1].tensor();//Eigen::tensor
-  auto tensor_peaks     = outputs[2].tensor();//Eigen::tensor
+  //auto upsample_heatmat = outputs[0].tensor();//Eigen::tensor
+  //auto upsample_pafmat  = outputs[1].tensor();//Eigen::tensor
+  //auto tensor_peaks     = outputs[2].tensor();//Eigen::tensor
 
   std::cout << "input                 " << image_tensor.DebugString() << std::endl;
   std::cout << "upsample_heatmat" << outputs[0].DebugString() << std::endl;
