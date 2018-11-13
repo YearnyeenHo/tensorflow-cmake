@@ -18,11 +18,16 @@ MESSAGE(STATUS "LINK LIBRARIES ${OpenCV_LIBS}")
 TensorFlow_REQUIRE_C_LIBRARY()
 TensorFlow_REQUIRE_SOURCE()
 
+
+
 include_directories(${OpenCV_INCLUDE_DIRS})
 include_directories($ENV{TENSORFLOW_BUILD_DIR}/includes/)
 
+file(GLOB srcs *.cc *.h*)
+file(GLOB utils utils/*.cpp utils/*.h*)
 
-add_executable (run_infer run_infer.cc)
+add_library(utils STATIC ${utils})
+add_executable(run_infer ${srcs})
 #target_include_directories(run_infer PRIVATE TensorFlow_DEP)
-target_link_libraries(run_infer ${OpenCV_LIBS})
-target_link_libraries(run_infer TensorFlow_DEP)
+
+target_link_libraries(run_infer utils ${OpenCV_LIBS} TensorFlow_DEP)
