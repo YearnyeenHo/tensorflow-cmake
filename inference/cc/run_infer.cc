@@ -187,15 +187,16 @@ int main(int argc, char const *argv[]) {
 
   while(true)
   {
-    cv::Mat image;
-    cap.read(image);
-    if (!image.data ) {
+    cv::Mat frame;
+    cap.read(frame);
+    if (!frame.data ) {
       std::cerr <<  "Could not open or find the image" << std::endl ;
       return -1;
     }
     // Create a 4D blob from a frame.
     cv::Size inpSize(224, 224);
-    cv::resize(image, image, inpSize);
+    cv::Mat image;
+    cv::resize(frame, image, inpSize);
     // convert byte to float image
     cv::Mat image_float;
     image.convertTo(image_float, CV_32FC3);
@@ -233,9 +234,10 @@ int main(int argc, char const *argv[]) {
     
     std::vector<Human> humans_vec;
     estimate_paf(humans_vec, peaks, heat_mat, paf_mat);
-    draw_humans(image, humans_vec);
+    // visualization
+    draw_humans(frame, humans_vec);
     std::cout << "num human " << humans_vec.size() << std::endl;
-    cv::imshow("Live", image);
+    cv::imshow("Live", frame);
     if (cv::waitKey(5) >= 0)
       break;
   } 
