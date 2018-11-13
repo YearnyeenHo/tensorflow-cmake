@@ -93,17 +93,19 @@ user@host $ mkdir ${TENSORFLOW_BUILD_DIR}
 user@host $ cp ${TENSORFLOW_SOURCE_DIR}/bazel-bin/tensorflow/*.so ${TENSORFLOW_BUILD_DIR}/
 user@host $ cp ${TENSORFLOW_SOURCE_DIR}/bazel-genfiles/tensorflow/cc/ops/*.h ${TENSORFLOW_BUILD_DIR}/includes/tensorflow/cc/ops/
 ```
-#### MAC OS X
+## MAC OS X
 deleting the line build:opt --host_copt=-march=native from the .tf_configure.bazelrc file.
-'''
+```
  bazel build -c opt  --copt=-msse4.2  //tensorflow:libtensorflow.so
 
  bazel build -c opt  --copt=-msse4.2 //tensorflow:libtensorflow_cc.so
-'''
+```
+
 Before run the executable, type
-'''
+
+```
 export DYLD_LIBRARY_PATH=/tensorflow_dist
-'''
+```
 export DYLD_LIBRARY_PATH=/Users/yearnyeen/tensorflow_dist
 
 otherwise you will get error: dyld: Library not loaded: @rpath/libtensorflow_cc.so
