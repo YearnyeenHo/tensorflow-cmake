@@ -1,470 +1,329 @@
 
+#define k 2
+#define NUM_VELOC 5
+#define TIME_INTERVAL 1.5
+#define BASIC 0.8
+#define ACTION_BASIC 0.05
 #include <algorithm>
 #include <vector>
-#include <Eigen>
+#include <Eigen/Core>
 #include "HumanAndBody.h"
+#include "HumanMovementInfo.h"
+#include <map>
 
-#define ROUND_NUM = 3
-#define NUM_HUMAN = 4
-#define DELAY = 0.01
-#define ACTION_BASIC = 0.05
+enum CtrlSiganlType {Still, Nod, Rotate, ArmMove, LegUp};
 
-#define STATIC = 0.1
-#define BASIC = 0.8
-#define EXTREME = 5
-#define FAST = BASIC+(EXTREME-BASIC)/3.0
-#define ACCELERATE = BASIC+2*(EXTREME-BASIC)/3.0
-#define SPEED_INTERVAL = ACCELERATE - BASIC
-#define REALTIME_FRAMERATE = 30.0
-
-enum Rotation {Still, Left, Right};
-class HumanMovmentInfo:
+class CalMovementForSegPlay
 {
 public:
-    HumanMovmentInfo(int human_id, int buf_len, int interv):m_id(human_id),
-                                                    m_buf_len(buf_len),
-                                                    m_interv(interv),
-                                                    m_fast(FAST),
-                                                    m_size(0),
-                                                    m_presize(0),
-                                                    m_nod_ratio(0),
-                                                    m_pre_nod_ratio(0),
-                                                    m_sizeChange(false),
-                                                    m_isjump(false),
-                                                    m_rotate(Still), 
-                                                    m_Nod(false),
-                                                    m_Legup(false),
-                                                    m_veloc(0)
-    { 
-
-        
-
-        //=== buffer =======
-        Eigen::Vector3f tmpV3f(-1,-1,-1);
-        std::vector<Eigen::Vector3f> tmpV0(m_buf_len, tmpV3f);
-        std::vector<std::vector<Eigen::Vector3f>> tmpV1(18, tmpV0);//={} Predecessor bodypart location （x,y,z), z is no use if not run lifting
-        m_prebodypart = tmpV1;
-        std::vector<float> tmpV2(m_buf_len, -1);//=[]//previous unique veloces of a human, with size of m_buf_len
-        m_veloc_buff = tmpV2;
-        std::vector<float> tmpV3(18, 0);
-        m_part_inst_veloc = tmpV;// = {}// Predecessor instance veloc
-        //==== current human veloc info ====
-        Eigen::Vector2f tmp(0,0);
-        std::vector<Eigen::Vector2f> tmpV4(m_part_list.size(), tmp);
-        m_part_inst_veloc_xy = tmpV4;
-
-        bbx<<-1,-1,-1,-1;// = -1
-        std::vector<int> tmpV={1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17};
-        m_part_list = tmpV;// = range(18)
+    CalMovementForSegPlay(float image_w, float image_h, float area_ratio=0.8)
+            m_num_velocs(NUM_VELOC),
+            m_part_interv(NUM_VELOC),
+            m_part_buff_size(k*NUM_VELOC),
+            m_num_frames(k*NUM_VELOC),
+            m_last_movetime(0),// = 0
+            m_width(image_w),// = image_w
+            m_heigh(image_h),// = image_h
+            m_left_boder(image_w/2 - image_w*area_ratio/2),// = image_w/2 - image_w*area_ratio/2
+            m_right_boder(image_w/2 + image_w*area_ratio/2)// = image_w/2 + image_w*area_ratio/2
+    {
     };
 
-    bool checkJump(float dy)
+    void calSegPlayState(const std::vector<float>& avg_veloc_list, 
+                        const std::vector<float>& inst_veloc_list, 
+                        const std::vector<int>& humans_trk_id, 
+                        std::vector<int>& humanPlayList, 
+                        std::vector<int>& inst_humanPlayList, 
+                        std::vector<float>& trk_veloc_list)
     {
-        m_isjump = false;
-        if (dy < - ACTION_BASIC) //moving up
-            m_isjump = true;
-        return m_isjump;
-    };
-
-    void getPreviousBodyParts(int frame_id, int part_id, float& x, float& y,float& z, float& xp, float& yp, float& zp)
-    {
-        Eigen::Vector3f pos;
-        pos = m_prebodypart[part_id][(frame_id + m_buf_len - m_interv)%m_buf_len];
-        x = pos(1), y=pos(2),z=pos(2);
-        pos = m_prebodypart[part_id][(frame_id + m_buf_len - m_interv/2)%m_buf_len];
-        xp = pos(1), yp=pos(2),zp=pos(2);
-    };
-
-    Rotation cal2dRotation(const Eiegn::Vector2f& c_v, const Eiegn::Vector2f& l_v, float d_x)
-    {
-        float Lcv = sqrt(c_v.dot(c_v));
-        float Llv = sqrt(l_v.dot(l_v));
-        if(Lcv-Llv<-ACTION_BASIC)//# rotation
+        if(humans_trk_id.size())
         {
-            if(d_x>ACTION_BASIC)//#left
-                return Left;
-            if(d_x<-ACTION_BASIC)//#righ   
-                return Right;
+            int maxTrkId = maxValOfVec<int>(humans_trk_id);
+            std::vector<int> tmp1(maxTrkId+1,0);
+            humanPlayList = tmp1;
+            inst_humanPlayList = tmp1;
+            std::vector<float> tmp2(maxTrkId+1,0);
+            trk_veloc_list = tmp2;
+        }
+        for(int i=0; i<humans_trk_id.size(); ++i)
+        {
+            trk_id = humans_trk_id[i];
+            if(trk_id != -1)
+            {
+                trk_veloc_list[trk_id] = avg_veloc_list[i];
+                if(avg_veloc_list[i]>BASIC)
+                    humanPlayList[trk_id] = 1;
+                if(inst_veloc_list[i]>BASIC)
+                    inst_humanPlayList[trk_id] = 1;
+            }
         }
     };
 
-    bool isHasPrePart(int part_id)
-    {
-        if(m_prebodypart[part_id](0) != -1)
-            return true;
-        else
-            return false;
+    void calMovementSpeeds(float time_stamp, std::vector<Human>& humans, std::vector<int>& humans_trk_id, int frame_rate=3,
+            std::vector<float>& avg_veloc_list,
+            std::map<int std::map<string, float>>& veloc_dict_dict,
+            std::vector<float>& rhythm_list,
+            std::vector<float>& inst_veloc_list)
+    {   /*
+            # avg_veloc_list: for seg play
+            # veloc_dict_dict: for mario go & jump
+            # rhythm_list:(0,1)vector, for free rhythm play
+        */
+        for(int i=0; i<humans.size(); ++i)
+        {
+            Human human = humans[i];
+            int trk_id = humans_trk_id[i];
+            if(m_human_info_objs.find(trk_id) == m_human_info_objs.end())
+            {
+                m_human_info_objs[trk_id] = HumanMovementInfo(trk_id, m_part_buff_size, m_part_interv); 
+            }
+            HumanMovementInfo& infoObj = m_human_info_objs[trk_id];
+
+            infoObj.updateHumanSize(human, RShoulder,LShoulder);
+            bool isjump = infoObj.calPartMovement(human, m_frame_counter);
+            float veloc = infoObj.calUniqueVeloc();
+            infoObj.checkNod(m_frame_counter, human);
+            infoObj.checkRotation(m_frame_counter, human);
+            infoObj.checkLegUp(m_frame_counter, human);
+            float avg_veloc = veloc;
+            if(veloc > BASIC)  //# valid, add veloc, get avg, else fast stop
+            {  
+                m_last_movetime = time_stamp;
+                avg_veloc = infoObj.updateVelocAndGetAvg(m_frame_counter, veloc);
+            }
+            else if(veloc >= 0.0)//# invalid, clear
+            {     
+                if(time_stamp - m_last_movetime > TIME_INTERVAL || veloc < 0.1)//# really stop? 
+                {
+                    infoObj.clearVelocBuff();
+                }    
+                else
+                {
+                    avg_veloc = BASIC+0.1;
+                }
+            }
+            infoObj.setFinalCurVeloc(avg_veloc);
+            rhythm_list.push_back(infoObj.checkAtRhythm());
+            inst_veloc_list.push_back(infoObj.inst_veloc);
+            avg_veloc_list.push_back(avg_veloc); 
+            std::map tmpMap;
+            tmpMap['go'] = avg_veloc;
+            tmpMap['jump'] = isjump;
+            veloc_dict_dict[trk_id]= tmpMap;
+        }//# humans' veloc ok
+        std::vector<int> remove_list;
+
+        for(std::map<int, HumanMovementInfo>::iterator it=m_human_info_objs.begin(); it!=m_human_info_objs.end(); ++it)
+        {
+            int trk_id = iterator->first;
+            if (!isInVec<int>(trk_id, humans_trk_id))
+                remove_list.append(trk_id);
+        }
+        for each(trk_id in remove_list)
+        {
+            m_human_info_objs.erase(trk_id);
+        }
+        m_frame_counter = (m_frame_counter+1)%m_num_frames;
     };
 
-    void checkRotation(int frame_id, Human& human)
+    void judgeContrlAndSendPortInfo(const std::map<int, HumanMovementInfo>& human_info_objs, CtrlSiganlType& ctrlSig, float& sx, float&sy)
     {
-        m_rotate = Still;
-        if(human.hasBodyPart(LShoulder) && human.hasBodyPart(RShoulder))
-        {   
-            if(isHasPrePart(LShoulder) && isHasPrePart(RShoulder))
+        std::vector<float> Nod_veloc_list;
+        std::vector<float> Rotate_veloc_list;
+        std::vector<float> ArmMove_velo_list;
+        std::vector<Eigen::Vector2f> ArmMove_velo_xy_list;
+        std::vector<float> LegUp_velo_list;
+        std::vector<Eigen::Vector2f> LegUp_velo_xy_list;
+        std::map<int, HumanMovementInfo>::const_iterator it = human_info_objs.begin();
+        for(it; it!=human_info_objs.end(); ++it)
+        {
+            if (checkInArea((it->second).bbx))
             {
-                float x1,y1,x2,y2,x,y,z,xp1,yp1,zp1,xp2,yp2,zp2;
-                getPreviousBodyParts(frame_id, LShoulder, x,y,z, xp1,yp1,zp1);
-                getPreviousBodyParts(frame_id, RShoulder, x,y,z, xp2,yp2,zp2); 
-                x1 = human.body_parts[LShoulder].x;
-                y1 = human.body_parts[LShoulder].y; 
-                x2 = human.body_parts[RShoulder].x;
-                y2 = human.body_parts[RShoulder].y; 
-                Eiegn::Vector2f c_v(x1-x2, y1-y2);
-                Eiegn::Vector2f l_v(xp1-xp2, yp1-yp2);
-                if(human.hasBodyPart(Nose))
+                if ((it->second).veloc > BASIC)
                 {
-                    Eigen::Vector2f xy = m_part_inst_veloc_xy[Nose];
-                    m_rotate = cal2dRotation(c_v, l_v, xy(0));
+                    float v, dx, dy;
+                    (it->second).getArmVeloc(v, dx, dy);
+                    if(v > BASIC)
+                    {
+                        ArmMove_velo_list.push_back(v);
+                        Eigen::Vector2f dxy(dx, dy);
+                        ArmMove_velo_xy_list.push_back(dxy);
+                    }
+                    (it->second).getLegUpveloc(v, dx, dy);
+                    if(v > BASIC)
+                    {
+                        LegUp_velo_list.push_back(v);
+                        dxy<<dx, dy;
+                        LegUp_velo_xy_list.push_back(dxy);
+                    }
+                    if ((it->second).Nod)
+                    {
+                        Eigen::Vector2f dxy = (it->second).part_inst_veloc_xy[Nose];
+                        if(dxy(1) !=0)
+                            Nod_veloc_list.push_back(dxy(1));
+                    }
+          
+                    if((it->second).rotate != Still)
+                    {
+                        float dx = (it->second).getRotateVeloc();
+                        if(dx != 0)
+                            Rotate_veloc_list.push_back(dx);
+                    }
+
                 }
             }
 
         }
-    };
+        getUniqueCtrlSignal(ArmMove_velo_list, 
+                            ArmMove_velo_xy_list, 
+                            LegUp_velo_list, 
+                            LegUp_velo_xy_list, 
+                            Nod_veloc_list, 
+                            Rotate_veloc_list,
+                            ctrlSig, sx, sy);
+    };//ok
 
-    float scaleBySize(float val)
+    void getUniqueCtrlSignal(std::vector<float>& Nod_veloc_list,
+                            std::vector<float>& Rotate_veloc_list,
+                            std::vector<float>& ArmMove_velo_list,
+                            std::vector<Eigen::Vector2f>& ArmMove_velo_xy_list,
+                            std::vector<float>& LegUp_velo_list,
+                            std::vector<Eigen::Vector2f>& LegUp_velo_xy_list,
+                            CtrlSiganlType& ctrlSig, float& sx, float&sy)
     {
-        if(m_size>0)
-            val/=m_size;
-        return val;        
-    };
-
-    void calMovement(float c_x, float c_y, float l_x, float l_y, float& dist, float& dx, float& dy)
-    {
-        float d_x = c_x-l_x;
-        float d_y = c_y-l_y;
-        float dis = abs(d_x)+ abs(d_y);
-        dist = scaleBySize(dis);
-        dx = scaleBySize(d_x);
-        dy = scaleBySize(d_y);
-    };
-
-    void checkNod(int frame_id, Human human)
-    {
-        m_Nod = False;
-        if(human.hasBodyPart(Nose) && human.hasBodyPart(Neck))
-        {
-            Eigen::Vector2f d_xy1 = m_part_inst_veloc_xy[Nose];
-            Eigen::Vector2f d_xy2 = m_part_inst_veloc_xy[Neck];
-            float x1,x2,y1,y2;
-            x1 = human.body_parts[Nose].x;
-            y1 = human.body_parts[Nose].y; 
-            x2 = human.body_parts[Neck].x;
-            y2 = human.body_parts[Neck].y;
-            float dist, dx, dy;
-            calMovement(x1,y1,x2,y2, dist, dx, dy);
-            m_nod_ratio = dist;
-            if(d_y1 > ACTION_BASIC*1.5 && abs(d_y2) < ACTION_BASIC && abs(d_x1) < ACTION_BASIC) 
-            {   
-                if(m_nod_ratio < m_pre_nod_ratio)
-                {
-                    m_Nod = true;
-                }
-
-            } 
-            m_pre_nod_ratio = m_nod_ratio;
-        } 
-    };
-
-    void checkLegUp(int frame_id, Human human)
-    {    
-        std::vector<int> leg_parts = {RKnee, RAnkle, LKnee, LAnkle};
-        m_Legup = False;
-        if (!m_sizeChange)
-        {
-            for(int i=0; i<leg_parts.size(); ++i)
-            {
-                part_id = leg_parts[i];
-                if(human.hasBodyPart(part_id))
-                {
-                    Eigen::Vector2f dxy = m_part_inst_veloc_xy[part_id];
-                    if(abs(dxy(1)) < ACTION_BASIC*2.0)
-                    {
-                        m_Legup = true;
-                        break;   
-                    }
-                }
-            } 
+        sx = 0,sy = 0;
+        ctrlSig = Still;
+        if(Nod_veloc_list.size() && Rotate_veloc_list.size())
+        {    
+            std::vector<float> tmpv1;
+            absVec<float>(Nod_veloc_list, tmpv1);
+            float m1 = maxValOfVec<float>(tmpv1);
+            std::vector<float> tmpv2;
+            absVec<float>(Rotate_veloc_list, tmpv2);
+            float m2 = maxValOfVec<float>(tmpv2);
+            if(m1 > m2)//#nod
+            {    
+                ctrlSig = Nod;
+                getCtrlVeloc(ctrlSig, Nod_veloc_list, sx,sy);
+            }
+            else//#rotate
+            {    
+                ctrlSig = Rotate;
+                getCtrlVeloc(ctrlSig, Rotate_veloc_list, sx,sy);
+            }
         }
-    }
-
-    void setFinalCurVeloc(float veloc)
-    {
-        m_veloc = veloc;
-    };
-
-    void updateHumanSize(Human human, int keyp1, int keyp2)
-    {
-        m_bbx = human.bbx;
-        m_sizeChange = false;
-        float sz = 0;
-        if(human.hasBodyPart(keyp1) && human.hasBodyPart(keyp2))
+        else
         {
-            float x1,x2,y1,y2;
-            x1 = human.body_parts[keyp1];
-            y1 = human.body_parts[keyp1];
-            x2 = human.body_parts[keyp2];
-            y2 = human.body_parts[keyp2];
-            float dis = float(sqrt(pow(x1-x2,2)+pow(y1-y2,2)));
-            if(m_size==-1)
-            {
-                m_size = dis;
-                m_presize = dis;
+            if (Nod_veloc_list.size())//#nod
+            {    
+                ctrlSig = Nod;
+                getCtrlVeloc(ctrlSig, Nod_veloc_list, sx,sy);
             }
             else
             {
-                m_presize = m_size;
-                m_size = (m_size + dis)/2.0;
-            }
-            if(abs(m_size - m_presize) > 0.1*m_size)
-            {
-                 m_sizeChange = true;
-            }   
-               
-        }
-    };
-
-    template<typename T>
-    T maxValOfVec(std::vector<T>& vec)
-    {
-        std::vector<T> tmp(vec);
-        std::sort (tmp.begin(), tmp.end());
-        return tmp[tmp.size()-1]; 
-    };
-    template<typename T>
-    T meanVec(std::vector<T>& vec)
-    {
-        T mean = 0;
-        for each(i in vec)
-        {
-            mean+=i;
-        }
-        mean/=vec.size();
-    };
-    template<typename T>
-    T argmax(std::vector<T>& vec)
-    {
-        T maxv;
-        int idx=0;
-        for(int i=0; i<vec.size(); ++i)
-        {
-            if(vec[i]>maxv)
-            {
-                idx = i;
-                maxv =vec[i];
-            }
-        }
-        return idx;
-    };
-    template<typename T>
-    void absVec(std::vector<T>& vec, std::vector<T>& des_vec)
-    {
-        for each(item in vec)
-        {
-            des_vec.push_back(-item);
-        }
-    };
-
-    float calUniqueVeloc()
-    {
-        m_veloc = maxValOfVec<float>(m_part_veloc); 
-        if(m_veloc==0)
-            m_veloc = -1;
-
-        m_inst_veloc = maxValOfVec<float>(m_part_inst_veloc);
-        if(m_inst_veloc==0)
-            m_inst_veloc = -1;
-
-        return m_veloc;
-    };
-
-    void getArmVeloc(float& v, float& dx, float& dy)
-    {
-        std::vector<int>arm_list = {RShoulder,RElbow,RWrist,LShoulder,LWrist,LElbow};
-        getLimbVeloc(arm_list, v, dx, dy);
-    };
-    void getLegUpveloc(float& v, float& dx, float& dy)
-    {
-        std::vector<int>leg_list = {RKnee, RAnkle, LKnee, LAnkle};
-        getLimbVeloc(leg_list, v, dx, dy);
-    };
-    void getLimbVeloc(std::vector<int>&limb_list, float& v, float& dx, float& dy)
-    { 
-        v=0, dx=0, dy = 0;
-        std::vector<float> v_list(maxValOfVec<int>(limb_list)+1), 0);
-        for each(auto part_id in limb_list)
-        {
-            v_list[part_id] = m_part_veloc[part_id];
-        }
-        std::vector<float> absTmp;
-        int part_id = argmax<float>(absVec<float>(v_list, absTmp));
-        Eigen::Vector2f dxy = m_part_inst_veloc_xy[part_id]; 
-        v = v_list[part_id];
-        dx = dxy(0), dy = dxy(1);
-    };
-
-    void getRotateVeloc(float& dx)
-    {        
-        Eigen::Vector2f dxy0 = m_part_inst_veloc_xy[Nose];
-        Eigen::Vector2f dxy1(0,0);
-        if(m_rotate == Left)
-        {
-            dxy1 = m_part_inst_veloc_xy[RShoulder];   
-        }
-        else if(m_rotate == Right)
-        
-            dxy1 = m_part_inst_veloc_xy[LShoulder];
-        }
-        if(abs(dxy0(0))>abs(dxy1(0)))
-        {
-            dx = dxy0(0);
-        }
-        else
-            dx = dxy1(0);
-    };
-
-    void clearVelocBuff()
-    {
-        std::vector<float> tmp(m_buf_len, -1);
-        m_veloc_buff = tmp;
-    };
-
-    void removePrePart(int part_id)
-    {
-        Eiegn::Vector3f tmp1(-1,-1, -1);
-        std::vector<Eiegn::Vector3f> tmpv(m_buf_len, tmp1);
-        m_prebodypart[part_id] = tmpv;
-        Eiegn::Vector2f tmp2(0,0);
-        m_part_inst_veloc[part_id] = tmp2;
-    };
-
-    void updatePrePartLocation(int frame_id, int part_id, Eigen::Vector3f& location)
-    {
-        if(m_prebodypart[part_id][0](0) == -1)
-        {
-            for(int i=0; i<m_buf_len; ++i)
-                m_prebodypart[part_id][i] = location;
-        }
-        else
-            m_prebodypart[part_id][frame_id%m_buf_len] = location;
-    };
-
-
-    float updateVelocAndGetAvg(int frame_id, float veloc)
-    {
-        if(m_veloc_buff[0]!=-1)
-        {
-            veloc_buff[frame_id%m_buf_len] = veloc;
-        }
-        else
-        {
-            //#init buffer
-            for(int i=0; i<m_buf_len; ++i)
-            {
-                m_veloc_buff[i] = veloc;
-            }
-        }
-        float avg_veloc = meanVec<float>(m_veloc_buff);
-        if(veloc>=FAST)
-            avg_veloc = veloc;        
-        return avg_veloc;
-    };
-
-    void reinit()
-    {
-        Eigen::Vector2f tmp(0,0);
-        std::vector<Eigen::Vector2f> tmpV1(m_part_list.size(), tmp);
-        m_part_inst_veloc_xy = tmpV1;
-
-        m_rhythmPoint_list.clear();
-        
-        m_isjump = false;
-        
-        std::vector<float> tmpV3(m_part_list.size(), -1);
-        m_part_veloc = tmpV3;
-    };
-
-    void movementRhythm(int part_id, float inst_veloc)
-    {
-        if(m_part_inst_veloc[part_id]>BASIC && inst_veloc<BASIC)
-            m_rhythmPoint_list.push_back(1);
-        m_part_inst_veloc[part_id] = inst_veloc;
-    };
-
-    bool calPartMovement(Human human, int frame_id)
-    {
-        reinit();
-        for each(part_id in m_part_list)
-        {
-            if(human.hasBodyPart(part_id))
-            {
-                float x,y,z;
-                human.getPartLocation(part_id, x,y,z);
-                if(isHasPrePart(part_id))
+                if (Rotate_veloc_list.size())//#rotate
                 {
-                    float l_x,l_y,l_z,p_x,p_y,p_z;
-                    getPreviousBodyParts(frame_id, part_id, l_x,l_y,l_z,p_x,p_y,p_z);
-                    float macr_v, macr_dx, macr_dy, local_v, local_dx, local_dy;
-                    calMovement(x,y,l_x,l_y, macr_v, macr_dx, macr_dy);
-                    calMovement(x,y,p_x,p_y, local_v, local_dx, local_dy);
-                    movementRhythm(part_id, local_v);
-                    Eigen::Vector2f tmp(local_dx, local_dy);
-                    m_part_inst_veloc_xy[part_id] = tmp;
-                    dy = 0
-                    if(local_v < BASIC || local_v > FAST*1.5)
-                    {
-                        m_part_veloc[part_id] = local_v;
-                        dy = local_dy;
-                    }
-                    else
-                    {
-                        m_part_veloc[part_id] = macr_v;
-                        dy = macr_dy;
-                    }
-                    if (!m_sizeChange && (part_id == RShoulder || part_id == LShoulder))
-                        m_isjump = checkJump(dy);
+                    ctrlSig = Rotate;
+                    getCtrlVeloc(ctrlSig, Rotate_veloc_list, sx,sy);
                 }
-                Eigen::Vector3f pos(x,y,z);
-                updatePrePartLocation(frame_id, part_id, pos);
             }
-            else// no detected part
-                removePrePart(part_id);
         }
-        return m_isjump;
+        if(ctrlSig == Still)
+        {
+            if (LegUp_velo_list.size())
+            {
+                ctrlSig = LegUp;
+                int idx = argmax<float>(LegUp_velo_list);
+                Eigen::Vector2f sxy = LegUp_velo_xy_list[idx];
+                velocScale(sxy, 5, 0.9);
+                sx = sxy(0);
+                sy = sxy(1);
+            }
+        }
+        if(ctrlSig == Still)
+        {
+            if (ArmMove_velo_list.size())
+            {
+                ctrlSig = ArmMove;
+                int idx = argmax<float>(ArmMove_velo_list);
+                Eigen::Vector2f sxy = ArmMove_velo_xy_list[idx];
+                velocScale(sxy, 5, 0.9);
+                sx = sxy(0);
+                sy = sxy(1);
+            }
+        }
     };
 
-    bool checkAtRhythm()
+    void getCtrlVeloc(CtrlSiganlType ctrlSig, std::vector<float>& veloc_list, float& sx, float& sy):
     {
-        if(m_rhythmPoint_list.size())
-            return true;
-        else
-            return false;
+        sx=0,sy= 0;
+
+        std::vector<float> tmpv1;
+        absVec<float>(veloc_list, tmpv1);
+        int idx = argmax<float>(tmpv1);
+        float veloc = veloc_list[idx]; 
+        if(ctrlSig == Nod) 
+        {
+            Eigen::Vector2f sxy(0,veloc);
+            velocScale(sxy, 10, 0.9);
+            sx = sxy(0);
+            sy = sxy(1);
+        }
+        if(ctrlSig == Rotate)
+        {
+            Eigen::Vector2f sxy(veloc, 0);
+            velocScale(sxy, 5, 0.9);
+            sx = sxy(0);
+            sy = sxy(1);
+        }
+    }
+
+    void velocScale(Eigen::Vector2f& dxy, float scale1, float scale2)
+    {
+        float t_x = scale1*dxy(0);
+        float y_x = scale1*dxy(1);
+        scaleVal(t_x, scale2);
+        scaleVal(t_y, scale2);
+        dxy(0)=t_x;
+        dxy(1)=t_y;
+    };
+    
+    void scaleVal(float& x, float scale=0.9)
+    {
+        if(abs(x)>1.0)
+            x = scale*(x/abs(x));
+        x = int(x*127/2 + 127/2);    
     };
 
-    int m_id;// = human_id
-    int m_buf_len;// =m_buf_len
-    int m_interv;// = m_interv
-    float m_fast;// = FAST
-    //=== buffer =======
-    std::vector<Eigen::Vector3f> m_prebodypart;//={} Predecessor bodypart location （x,y,z), z is no use if not run lifting
-    std::vector<float> m_veloc_buff;//=[]//previous unique veloces of a human, with size of m_buf_len
-    std::vector<float> m_part_inst_veloc;// = {}// Predecessor instance veloc
-    //==== current human veloc info ====
-    std::vector<Eigen::Vector3f> m_part_veloc;// = {} // current veloc of each part
-    std::vector<Eigen::Vector2f> m_part_inst_veloc_xy;// = {}  current veloc x and y of each part
+    bool checkInArea(Eigen::Vector4f& bbx)
+    {
+        bool inarea = false;
+        x = int(bbx(0) + bbx(2)/2.0);
+        y = int(bbx(1) + bbx(3)/2.0);   
+        if(x>m_left_boder && x<m_right_boder)
+            inarea = true;
+        return inarea;
+    };
 
-    //=== human current states ===
-    std::vector<float> m_rhythmPoint_list;// = []
-    float m_size;// = 0
-    float m_presize;// = 0
-    float m_nod_ratio;// = 0
-    float m_pre_nod_ratio;// = 0
-    Eigen::Vector4f bbx;// = -1
-    bool m_sizeChange;// = False
-    bool m_isjump;// = False
-    Rotation m_rotate;// =  m_Rotate.Still.value
-    bool m_Nod;// = False
-    bool m_Legup;
-    float m_veloc;// = 0
-    std::vector<int> m_part_list;// = range(18)
+    std::map<int, HumanMovementInfo> m_human_info_objs;
+    int m_frame_counter;
+    int m_num_velocs; //= 5 #3 frames,2 velocs, =frame_rate
+    int m_part_interv;// = self.num_velocs
+    int m_part_buff_size;// = self.num_velocs * k
+    int m_num_frames;// = self.num_velocs * k
+
+    float m_last_movetime;// = 0
+
+    float m_width;// = image_w
+    float m_heigh;// = image_h
+    float m_left_boder;// = image_w/2 - image_w*area_ratio/2
+    float m_right_boder;// = image_w/2 + image_w*area_ratio/2
 };
+   
+
+        
+   
+
+
+
+

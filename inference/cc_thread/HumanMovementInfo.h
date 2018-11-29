@@ -20,6 +20,66 @@
 #define REALTIME_FRAMERATE = 30.0
 
 enum Rotation {Still, Left, Right};
+
+
+template<typename T>
+T maxValOfVec(std::vector<T>& vec)
+{
+    std::vector<T> tmp(vec);
+    std::sort (tmp.begin(), tmp.end());
+    return tmp[tmp.size()-1]; 
+};
+template<typename T>
+T meanVec(std::vector<T>& vec)
+{
+    T mean = 0;
+    for each(i in vec)
+    {
+        mean+=i;
+    }
+    mean/=vec.size();
+};
+template<typename T>
+T argmax(std::vector<T>& vec)
+{
+    T maxv;
+    int idx=0;
+    for(int i=0; i<vec.size(); ++i)
+    {
+        if(vec[i]>maxv)
+        {
+            idx = i;
+            maxv =vec[i];
+        }
+    }
+    return idx;
+};
+template<typename T>
+void absVec(std::vector<T>& vec, std::vector<T>& des_vec)
+{
+    for each(item in vec)
+    {
+        des_vec.push_back(-item);
+    }
+};
+
+template<typename T>
+bool isInVec(T val, std::vector<T>& vec)
+{   
+    bool invec = false;
+    for each(i in vec)
+    {
+        if(i==val)
+        {
+            invec = true;
+            break;
+        }
+    }
+    return invec;
+};
+
+
+
 class HumanMovmentInfo:
 {
 public:
@@ -38,9 +98,6 @@ public:
                                                     m_Legup(false),
                                                     m_veloc(0)
     { 
-
-        
-
         //=== buffer =======
         Eigen::Vector3f tmpV3f(-1,-1,-1);
         std::vector<Eigen::Vector3f> tmpV0(m_buf_len, tmpV3f);
@@ -66,7 +123,7 @@ public:
         if (dy < - ACTION_BASIC) //moving up
             m_isjump = true;
         return m_isjump;
-    };
+    };//ok
 
     void getPreviousBodyParts(int frame_id, int part_id, float& x, float& y,float& z, float& xp, float& yp, float& zp)
     {
@@ -122,7 +179,7 @@ public:
             }
 
         }
-    };
+    };//ok
 
     float scaleBySize(float val)
     {
@@ -156,7 +213,7 @@ public:
             float dist, dx, dy;
             calMovement(x1,y1,x2,y2, dist, dx, dy);
             m_nod_ratio = dist;
-            if(d_y1 > ACTION_BASIC*1.5 && abs(d_y2) < ACTION_BASIC && abs(d_x1) < ACTION_BASIC) 
+            if(abs(d_y1) > ACTION_BASIC && abs(d_y2) < ACTION_BASIC && abs(d_x1) < ACTION_BASIC && !m_sizeChange) 
             {   
                 if(m_nod_ratio < m_pre_nod_ratio)
                 {
@@ -166,7 +223,7 @@ public:
             } 
             m_pre_nod_ratio = m_nod_ratio;
         } 
-    };
+    };//ok
 
     void checkLegUp(int frame_id, Human human)
     {    
@@ -188,12 +245,12 @@ public:
                 }
             } 
         }
-    }
+    };//ok
 
     void setFinalCurVeloc(float veloc)
     {
         m_veloc = veloc;
-    };
+    };//ok
 
     void updateHumanSize(Human human, int keyp1, int keyp2)
     {
@@ -218,54 +275,13 @@ public:
                 m_presize = m_size;
                 m_size = (m_size + dis)/2.0;
             }
-            if(abs(m_size - m_presize) > 0.1*m_size)
+            if(abs(m_size - m_presize) > 0.08*m_size)
             {
                  m_sizeChange = true;
             }   
                
         }
-    };
-
-    template<typename T>
-    T maxValOfVec(std::vector<T>& vec)
-    {
-        std::vector<T> tmp(vec);
-        std::sort (tmp.begin(), tmp.end());
-        return tmp[tmp.size()-1]; 
-    };
-    template<typename T>
-    T meanVec(std::vector<T>& vec)
-    {
-        T mean = 0;
-        for each(i in vec)
-        {
-            mean+=i;
-        }
-        mean/=vec.size();
-    };
-    template<typename T>
-    T argmax(std::vector<T>& vec)
-    {
-        T maxv;
-        int idx=0;
-        for(int i=0; i<vec.size(); ++i)
-        {
-            if(vec[i]>maxv)
-            {
-                idx = i;
-                maxv =vec[i];
-            }
-        }
-        return idx;
-    };
-    template<typename T>
-    void absVec(std::vector<T>& vec, std::vector<T>& des_vec)
-    {
-        for each(item in vec)
-        {
-            des_vec.push_back(-item);
-        }
-    };
+    };//ok
 
     float calUniqueVeloc()
     {
@@ -298,14 +314,13 @@ public:
         {
             v_list[part_id] = m_part_veloc[part_id];
         }
-        std::vector<float> absTmp;
-        int part_id = argmax<float>(absVec<float>(v_list, absTmp));
+        int part_id = argmax<float>(v_list);
         Eigen::Vector2f dxy = m_part_inst_veloc_xy[part_id]; 
         v = v_list[part_id];
         dx = dxy(0), dy = dxy(1);
     };
 
-    void getRotateVeloc(float& dx)
+    float getRotateVeloc()
     {        
         Eigen::Vector2f dxy0 = m_part_inst_veloc_xy[Nose];
         Eigen::Vector2f dxy1(0,0);
@@ -323,6 +338,7 @@ public:
         }
         else
             dx = dxy1(0);
+        return dx;
     };
 
     void clearVelocBuff()
